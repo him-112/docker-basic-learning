@@ -1,0 +1,104 @@
+version: '3.8'
+
+services:
+  # Frontend - React Application
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:5000/api
+      - REACT_APP_ENV=development
+    depends_on:
+      - backend
+    volumes:
+      # Enable hot reload for development
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    networks:
+      - app-network
+
+  # Backend - Node.js API
+  backend:
+    build: ./backend
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://admin:secret123@database:5432/myapp
+      - REDIS_URL=redis://cache:6379
+      - JWT_SECRET=your-super-secret-jwt-key
+    depends_on:
+      - database
+      - cache
+    volumes:
+      # Mount source code for development
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - app-network
+      - db-network
+
+  # Database - PostgreSQL
+  database:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: myapp
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secret123
+    volumes:
+      # Persist database data
+      - postgres_data:/var/lib/postgresql/data
+      # Initialize database with schema
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./database/seed.sql:/docker-entrypoint-initdb.d/seed.sql
+    ports:
+      - "5432:5432"
+    networks:
+      - db-network
+    restart: unless-stopped
+
+  # Cache - Redis
+  cache:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - app-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  # Database Admin - pgAdmin
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@example.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "8080:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      - database
+    networks:
+      - db-network
+
+# Named volumes for data persistence
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+# Custom networks for service isolation
+networks:
+  app-network:
+    driver: bridge
+  db-network:
+    driver: bridge
+    # Internal network - no external access
+    internal: false 
